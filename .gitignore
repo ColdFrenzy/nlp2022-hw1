@@ -146,3 +146,6 @@ static
 .idea
 *.iml
 data-secret
+
+/data
+/model/img
