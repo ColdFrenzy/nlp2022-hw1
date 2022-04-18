@@ -76,6 +76,11 @@ if __name__ == "__main__":
     with open(MISSING_WORDS_FILE, 'w') as f:
         f.write(json.dumps(missing_words))
     
+    # check if characters are only numeric isnumeric
+    # check if they start with capital letter NO, they are already lowercased
+    # check if a character is a floating point number r'' raw string
+    # if re.match(r'^-?\d+(?:\.\d+)$', element)
+    
     # epochs = 100
     # for epoch in epochs:
     #     print(f"Epoch {epoch}/{epochs}")
