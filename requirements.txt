@@ -9,3 +9,4 @@ seqeval==1.2.2
 matplotlib==3.5.1
 nltk==3.7
 gensim==4.1.2
+wandb==0.12.14

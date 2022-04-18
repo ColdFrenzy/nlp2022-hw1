@@ -1,0 +1,40 @@
+early_terminate:
+  eta: 3
+  min_iter: 3
+  type: hyperband
+method: bayes
+metric:
+  goal: minimize
+  name: val_loss
+parameters:
+  batch_size:
+    values:
+    - 8
+    - 16
+    - 32
+    - 50
+    - 200
+  dropout:
+    distribution: uniform
+    max: 0.8
+    min: 0
+  epochs:
+    value: 100
+  hidden_size:
+    values:
+    - 256
+    - 128
+    - 518
+    - 64
+  learn_rate:
+    distribution: uniform
+    max: 0.3
+    min: 0.0003
+  seq_len:
+    values:
+    - 3
+    - 5
+    - 10
+    - 15
+    - 20
+program: main.py

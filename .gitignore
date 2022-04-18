@@ -149,3 +149,5 @@ data-secret
 
 /data
 /model/img
+/hw1/wandb
+/model/weights

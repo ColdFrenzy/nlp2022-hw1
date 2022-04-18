@@ -224,3 +224,33 @@ def update_missing_words(text: str, missing_words: defaultdict,
             continue
         else:
             missing_words[word[0]] += 1
+            
+def extract_embedding(words: str, missing_words: defaultdict, word2vec_embed):
+    """Use a pretrained embedding the text.
+    
+    :param text:  list of lists where inner list has len = seq_len
+    :param missing_words: dictionary of unseen words in the embedding model
+    :param world2vec_embed: embedding vector
+    :return embedded sentences: final embedding of the sentence
+    """
+    
+    embedding = torch.zeros((len(words), word2vec_embed.vector_size))
+    for i, word in enumerate(words):
+        if word in word2vec_embed: 
+            embedding[i] = torch.from_numpy(word2vec_embed[word])
+        else:
+            missing_words[word] += 1
+            embedding[i] = torch.from_numpy(word2vec_embed["<unk>"])
+
+    return embedding 
+def extract_labels(labels, label_to_id):
+    """Extract the label's indexes as a torch tensor
+
+    :param labels: list of str
+    :param label_to_id: map from label to id
+    """
+    new_labels = torch.zeros((len(labels)),dtype=torch.int32)
+    for i, label in enumerate(labels):
+        new_labels[i] = int(label_to_id[label])
+    
+    return new_labels

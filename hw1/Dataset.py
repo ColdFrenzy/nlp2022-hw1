@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 from typing import Callable, Dict
 from collections import defaultdict
 import json
-from utils import read_tsv, extract_sequences
+from utils import read_tsv, extract_sequences, extract_labels
 
 
 class NamedEntityRecognitionDataset(Dataset):
@@ -50,13 +50,13 @@ class NamedEntityRecognitionDataset(Dataset):
 
 
         for sentence_id in dataset_as_dict:
-            sample, label = extract_sequences(dataset_as_dict[sentence_id],seq_len = self.seq_len, skip_len=self.skip_len,centered=False)
-
-            self.samples.append(
-                (self.feature_extraction_function(
-                    sample, self.missing_words,
-                    self.word2vec_embed, self.stopset),
-                 torch.tensor(int(self.label_to_id[label]))))
+            subsentences, sub_label = extract_sequences(dataset_as_dict[sentence_id],seq_len = self.seq_len, skip_len=self.skip_len,centered=False)
+            for words, labels in zip(subsentences,sub_label):
+                self.samples.append(
+                    (self.feature_extraction_function(
+                        words, self.missing_words,
+                        self.word2vec_embed),
+                     extract_labels(labels,self.label_to_id)))
 
     def __len__(self):
         """Return the number of samples in our dataset."""
