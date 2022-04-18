@@ -3,13 +3,15 @@ import time
 import string
 import nltk
 import sklearn
+import json
 import numpy as np
 import gensim.downloader
 from nltk.corpus import stopwords
 from collections import defaultdict
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import ConfusionMatrixDisplay
-from utils import read_tsv, load_labels, count_labels, plot_dict, extract_sequences, pretrained_feature_extractor
+from utils import read_tsv, load_labels, count_labels, plot_dict, extract_sequences,\
+    pretrained_feature_extractor, update_missing_words
 from model import BiLSTMModel
 
 
@@ -20,6 +22,7 @@ TRAIN_FILE = os.path.join(DATA_DIR, "train.tsv")
 DEV_FILE = os.path.join(DATA_DIR, "dev.tsv")
 MODEL_DIR = os.path.join(MAIN_DIR, "model")
 LABELS_FILE = os.path.join(MODEL_DIR, "labels_to_id.json")
+MISSING_WORDS_FILE = os.path.join(MODEL_DIR, "word2vec-google-news-300-missing_words.json")
 
 
 # =============================================================================
@@ -34,12 +37,12 @@ print(f"Time to download and load the stopset: {time.time()-stopword_start}")
 word2vec_start = time.time()
 # downloaded in C:/Users/Francesco/gensim-data
 # use glove-wiki during debugging since it's faster to load
-word2vec_embed = gensim.downloader.load('glove-wiki-gigaword-50')
+# word2vec_embed = gensim.downloader.load('glove-wiki-gigaword-50')
+word2vec_embed = gensim.downloader.load('word2vec-google-news-300')
 embedding_size = word2vec_embed.vector_size
 word2vec_embed.add_vector("<pad>", np.zeros(embedding_size))
 unk_embedding = word2vec_embed.vectors.mean(axis=0)
 word2vec_embed.add_vector("<unk>", unk_embedding)
-# word2vec_embed = gensim.downloader.load('word2vec-google-news-300')
 print(f"Time to download and load word2vec: {time.time()-word2vec_start}")
 
 
@@ -63,8 +66,16 @@ if __name__ == "__main__":
     sequence, label = extract_sequences(training_data["0"], seq_len, seq_skip, True)
     sequence_2, label_2 = extract_sequences(training_data["0"], seq_len, seq_skip, False)
     
-    missing_words = defaultdict(int)
-    embedding = pretrained_feature_extractor(sequence_2, missing_words, word2vec_embed)
+    # =============================================================================
+    # CHECK MISSING WORDS FROM THE DATASET AND WRITE THEM ON FILE
+    # =============================================================================
+    missing_words = defaultdict(lambda: 0)
+    for sentence_id, sentence in training_data.items():
+        update_missing_words(sentence, missing_words, word2vec_embed)
+    missing_words = dict(missing_words)
+    with open(MISSING_WORDS_FILE, 'w') as f:
+        f.write(json.dumps(missing_words))
+    
     # epochs = 100
     # for epoch in epochs:
     #     print(f"Epoch {epoch}/{epochs}")

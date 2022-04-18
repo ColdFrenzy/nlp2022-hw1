@@ -192,12 +192,11 @@ def extract_sequences(sequence: List[Tuple[str,str]], seq_len, skip_len, centere
 
 def pretrained_feature_extractor(text: str, missing_words: defaultdict,
                                  word2vec_embed):
-    """Use a pretrained embedding.
+    """Use a pretrained embedding the text.
     
     :param text:  list of lists where inner list has len = seq_len
     :param missing_words: dictionary of unseen words in the embedding model
     :param world2vec_embed: embedding vector
-    :param stopset: list of stopsets
     :return embedded sentences: final embedding of the sentence
     """
     
@@ -211,3 +210,17 @@ def pretrained_feature_extractor(text: str, missing_words: defaultdict,
                 embedding[i][j] = torch.from_numpy(word2vec_embed["<unk>"])
 
     return embedding
+
+def update_missing_words(text: str, missing_words: defaultdict,
+                                 word2vec_embed):
+    """Update the list of missing words given a text
+    
+    :param text:  list of lists where inner list are single words
+    :param missing_words: dictionary of unseen words in the embedding model
+    :param world2vec_embed: embedding vector
+    """
+    for word in text:
+        if word[0] in word2vec_embed: 
+            continue
+        else:
+            missing_words[word[0]] += 1
