@@ -13,7 +13,6 @@ class NamedEntityRecognitionDataset(Dataset):
                  label_to_id: Dict,
                  seq_len: int,
                  skip_len: int,
-                 stopset=None,
                  word2vec_embed=None):
         """NER_Dataset init.
 
@@ -22,7 +21,6 @@ class NamedEntityRecognitionDataset(Dataset):
         :param label_to_id:
         :param seq_len: number of elements in a single sample 
         :param skip_len:
-        :param stopset:
         :param word2vec_embed:
 
         Returns
@@ -33,12 +31,12 @@ class NamedEntityRecognitionDataset(Dataset):
         # standard constructor
         self.dataset_path = dataset_path
         self.label_to_id = label_to_id
+        self.labels = [l for l in label_to_id.keys()]
         self.seq_len = seq_len
         self.skip_len = skip_len
         self.feature_extraction_function = feature_extraction_function
         # call to init the data
         self.missing_words = defaultdict(int)
-        self.stopset = stopset
         self.word2vec_embed = word2vec_embed
         self._init_data()
 
@@ -50,12 +48,11 @@ class NamedEntityRecognitionDataset(Dataset):
 
 
         for sentence_id in dataset_as_dict:
-            subsentences, sub_label = extract_sequences(dataset_as_dict[sentence_id],seq_len = self.seq_len, skip_len=self.skip_len,centered=False)
+            subsentences, sub_label = extract_sequences(dataset_as_dict[sentence_id],seq_len = self.seq_len, skip_len=self.skip_len, labels=self.labels,centered=False)
             for words, labels in zip(subsentences,sub_label):
                 self.samples.append(
                     (self.feature_extraction_function(
-                        words, self.missing_words,
-                        self.word2vec_embed),
+                        words, self.word2vec_embed, self.missing_words),
                      extract_labels(labels,self.label_to_id)))
 
     def __len__(self):

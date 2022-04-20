@@ -7,10 +7,10 @@ import json
 import numpy as np
 import wandb
 import torch
+import random
 import gensim.downloader
 from torch import nn, optim
 from nltk.corpus import stopwords
-
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import ConfusionMatrixDisplay
 from Trainer import Trainer
@@ -34,6 +34,7 @@ WEIGHTS_DIR= os.path.join(MODEL_DIR, "weights")
 if not os.path.exists(WEIGHTS_DIR):
     os.mkdir(WEIGHTS_DIR)
 
+random.seed(42)
 
 wandb.login()
 
@@ -51,6 +52,7 @@ hyperparams_defaults = dict(
 wandb.init(config=hyperparams_defaults, project="nlp2022-hw1")
 # Access all hyperparameter values through wandb.config
 config = wandb.config
+run_name = wandb.run.name
 
 
 
@@ -65,7 +67,13 @@ stopset = set(stopwords.words('english') +
 print(f"Time to download and load the stopset: {time.time()-stopword_start}")
 word2vec_start = time.time()
 # downloaded in C:/Users/Francesco/gensim-data
-word2vec_embed = gensim.downloader.load('word2vec-google-news-300')
+# use glove-wiki during debugging since it's faster to load
+word2vec_embed = gensim.downloader.load('glove-wiki-gigaword-50')
+# word2vec_embed = gensim.downloader.load('word2vec-google-news-300')
+embedding_size = word2vec_embed.vector_size
+word2vec_embed.add_vector("<pad>", np.zeros(embedding_size))
+unk_embedding = word2vec_embed.vectors.mean(axis=0)
+word2vec_embed.add_vector("<unk>", unk_embedding)
 print(f"Time to download and load word2vec: {time.time()-word2vec_start}")
 
 
@@ -90,12 +98,14 @@ if __name__ == "__main__":
     num_of_labels = len(label_to_id)
     batch_size = config.epochs
     lr = config.learn_rate
+    dropout = config.dropout
     alpha = 0.99
     eps = 1e-5
     # =============================================================================
     #  MODEL
     # =============================================================================
-    bilstm_crf_model = BiLSTMCRFModel(embedding_len, num_of_labels, bilstm_hidden_size, True,device)
+    bilstm_crf_model = BiLSTMCRFModel(embedding_len, num_of_labels, bilstm_hidden_size, True ,word2vec_embed, id_to_label,device, dropout)
+
     # sequence, label = extract_sequences(training_data["0"], seq_len, seq_skip, True)
     # sequence_2, label_2 = extract_sequences(training_data["0"], seq_len, seq_skip, False)
     
@@ -131,16 +141,20 @@ if __name__ == "__main__":
     # if re.match(r'^-?\d+(?:\.\d+)$', element)
     
     
-    epochs = 10
+    epochs = 30
+       
     for epoch in range(epochs):
-        avg_epoch_loss, valid_loss = trainer.train(train_dataloader,
-                                                   dev_data, 1)
+        avg_epoch_loss, valid_loss, metrics = trainer.train(train_dataloader,
+                                                    dev_data, 1)
         to_log = {"train_loss": avg_epoch_loss,
-                  "val_loss": valid_loss}
+                  "dev_loss": valid_loss}
+        to_log.update(metrics)
         wandb.log(to_log)
+        NEW_WEIGHTS_DIR = os.path.join(WEIGHTS_DIR, run_name)
+        if not os.path.exists(NEW_WEIGHTS_DIR):
+            os.mkdir(NEW_WEIGHTS_DIR)
         model_name = f"{bilstm_crf_model.name}_{epoch}.pt"
-        torch.save(bilstm_crf_model.state_dict(), os.path.join(WEIGHTS_DIR, model_name))    
-    
-    
+        torch.save(bilstm_crf_model.state_dict(), os.path.join(NEW_WEIGHTS_DIR, model_name))
+  
 
 

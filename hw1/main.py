@@ -6,6 +6,7 @@ import sklearn
 import json
 import numpy as np
 import wandb
+import random
 import torch
 import gensim.downloader
 from torch import nn, optim
@@ -24,6 +25,8 @@ from evaluate import read_dataset
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('Using device:', device)
 
+random.seed(42)
+
 MAIN_DIR = os.path.abspath(os.path.join(__file__, os.pardir, os.pardir))
 DATA_DIR = os.path.join(MAIN_DIR, "data")
 TRAIN_FILE = os.path.join(DATA_DIR, "train.tsv")
@@ -37,12 +40,6 @@ if not os.path.exists(WEIGHTS_DIR):
 # =============================================================================
 # STOPWORDS AND EMBEDDING
 # =============================================================================
-# stopwords C:\Users\Francesco\AppData\Roaming\nltk_data
-stopword_start = time.time()
-nltk.download('stopwords')
-stopset = set(stopwords.words('english') +
-              [p for p in string.punctuation])
-print(f"Time to download and load the stopset: {time.time()-stopword_start}")
 word2vec_start = time.time()
 # downloaded in C:/Users/Francesco/gensim-data
 # use glove-wiki during debugging since it's faster to load
@@ -57,14 +54,13 @@ print(f"Time to download and load word2vec: {time.time()-word2vec_start}")
 
 wandb.login()
 
-# Pass your defaults to wandb.init
 wandb.init(project="nlp2022-hw1")
 
-
+run_name = wandb.run.name
 
 if __name__ == "__main__":
     # training_data = read_tsv(TRAIN_FILE)
-    # dev_data = read_tsv(DEV_FILE)
+    dev_data_dict = read_tsv(DEV_FILE)
     label_to_id, id_to_label = load_labels(LABELS_FILE)
     labels = [label for label in label_to_id.keys()]
     # label_dist = count_labels(DEV_FILE, exclude=["O"])
@@ -74,30 +70,35 @@ if __name__ == "__main__":
     # =============================================================================
     num_of_classes = len(label_to_id)
     seq_len = 5
-    seq_skip = 1
+    seq_skip = 3
     bilstm_hidden_size = 256
     embedding_len = word2vec_embed.vector_size
     num_of_labels = len(label_to_id)
     batch_size = 20
     lr = 0.0003
+    dropout = 0.2
     alpha = 0.99
     eps = 1e-5
     # =============================================================================
     #  MODEL
     # =============================================================================
-    bilstm_crf_model = BiLSTMCRFModel(embedding_len, num_of_labels, bilstm_hidden_size, True,device)
+    bilstm_crf_model = BiLSTMCRFModel(embedding_len, num_of_labels, bilstm_hidden_size, True, word2vec_embed, id_to_label, device, dropout)
     # sequence, label = extract_sequences(training_data["0"], seq_len, seq_skip, True)
     # sequence_2, label_2 = extract_sequences(training_data["0"], seq_len, seq_skip, False)
     
     # =============================================================================
     # DATASETS
     # =============================================================================
+    # Create a dataset with fixed batch size and fixed sequence length.
+    # While the recurrent networks accept every kind of sequence length, during
+    # training we need equal length sequences within a batch. That's why we
+    # use padding
     pretrained_feature_extractor = extract_embedding
     training_data = NamedEntityRecognitionDataset(TRAIN_FILE, pretrained_feature_extractor,
-                                    label_to_id,seq_len,seq_skip, stopset, word2vec_embed)
+                                    label_to_id,seq_len,seq_skip, word2vec_embed)
     train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
     dev_data = NamedEntityRecognitionDataset(DEV_FILE, pretrained_feature_extractor,
-                               label_to_id,seq_len,seq_skip, stopset, word2vec_embed)
+                               label_to_id,seq_len,seq_skip, word2vec_embed)
     # =============================================================================
     # TRAINER
     # =============================================================================
@@ -115,25 +116,25 @@ if __name__ == "__main__":
     # with open(MISSING_WORDS_FILE, 'w') as f:
     #     f.write(json.dumps(missing_words))
     
-    # check if characters are only numeric isnumeric
-    # check if they start with capital letter NO, they are already lowercased
     # check if a character is a floating point number r'' raw string
     # if re.match(r'^-?\d+(?:\.\d+)$', element)
     
+
     
     epochs = 10
     for epoch in range(epochs):
-        avg_epoch_loss, valid_loss = trainer.train(train_dataloader,
-                                                   dev_data, 1)
+        avg_epoch_loss, valid_loss, metrics = trainer.train(train_dataloader,
+                                                    dev_data, 1)
         to_log = {"train_loss": avg_epoch_loss,
-                  "val_loss": valid_loss}
+                  "dev_loss": valid_loss}
+        to_log.update(metrics)
         wandb.log(to_log)
+        NEW_WEIGHTS_DIR = os.path.join(WEIGHTS_DIR, run_name)
+        if not os.path.exists(NEW_WEIGHTS_DIR):
+            os.mkdir(NEW_WEIGHTS_DIR)
         model_name = f"{bilstm_crf_model.name}_{epoch}.pt"
-        torch.save(bilstm_crf_model.state_dict(), os.path.join(WEIGHTS_DIR, model_name))
-        
-    
-    
-    # y_true = np.random.randint(0,13, 100)
-    # y_pred = np.random.randint(0,13, 100)
+        torch.save(bilstm_crf_model.state_dict(), os.path.join(NEW_WEIGHTS_DIR, model_name))
+
+
     # confusion_matrix(y_true, y_pred)
     # ConfusionMatrixDisplay.from_predictions(y_true, y_pred,display_labels=labels,cmap='Blues',normalize="true")

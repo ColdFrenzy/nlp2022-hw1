@@ -1,4 +1,6 @@
 import torch
+import wandb
+import sklearn
 
 
 class Trainer():
@@ -66,7 +68,7 @@ class Trainer():
             print('  [E: {:2d}] train loss = {:0.4f}'.format(
                 epoch, avg_epoch_loss))
 
-            valid_loss = self.evaluate(valid_dataset)
+            valid_loss, metrics = self.evaluate(valid_dataset)
 
             print('  [E: {:2d}] valid loss = {:0.4f}'.format(
                 epoch, valid_loss))
@@ -74,9 +76,9 @@ class Trainer():
         print('... Done!')
 
         avg_epoch_loss = train_loss / epochs
-        return avg_epoch_loss, valid_loss
+        return avg_epoch_loss, valid_loss, metrics
 
-    def evaluate(self, valid_dataset, wandb = None):
+    def evaluate(self, valid_dataset):
         """
         Args:
             valid_dataset: the dataset to use to evaluate the model.
@@ -85,19 +87,56 @@ class Trainer():
             avg_valid_loss: the average validation loss over valid_dataset.
         """
         valid_loss = 0.0
-
-        # no gradient updates here
+        metrics = {}
+        
+        y_true = None
+        y_predicted = None
+        # to remove dropout
+        self.model.eval()
         with torch.no_grad():
-            for sample in valid_dataset:
+
+            for i, sample in enumerate(valid_dataset):
                 inputs = sample[0].type(
                     torch.float32).unsqueeze(0).to(self.device)
-                labels = sample[1].unsqueeze(0).to(self.device)
+                true_labels = sample[1].unsqueeze(0).to(self.device)
 
-                predictions = self.model(inputs)
-                sample_loss = self.model.loss(inputs, labels)
+                # predictions = self.model(inputs)
+                sample_loss = self.model.loss(inputs, true_labels)
                 valid_loss += sample_loss.tolist()
 
-        return valid_loss / len(valid_dataset)
+                scores, predicted_labels = self.model(inputs)   
+                # remove padding
+                true_labels = true_labels[:, [n for n in range(len(predicted_labels[0]))]]
+                predicted_labels = torch.FloatTensor(predicted_labels).squeeze(0)
+                true_labels = true_labels.squeeze(0)
+                true_labels = true_labels.to("cpu")
+                predicted_labels.to("cpu")
+                if i == 0:    
+                    y_true = true_labels
+                    y_predicted = predicted_labels
+                else:
+                    y_true = torch.cat((y_true, true_labels))
+                    y_predicted = torch.cat((y_predicted, predicted_labels))
+        
+        self.model.train()
+        cm = sklearn.metrics.confusion_matrix(y_true, y_predicted)
+        # ConfusionMatrixDisplay.from_predictions(y_true, y_predicted,display_labels=labels,cmap='Blues',normalize="true")
+        abs_f1 = sklearn.metrics.f1_score(y_true, y_predicted, average="micro")
+        macro_f1 = sklearn.metrics.f1_score(y_true, y_predicted, average="macro")
+        abs_precision = sklearn.metrics.precision_score(y_true, y_predicted, average="micro")
+        macro_precision = sklearn.metrics.precision_score(y_true, y_predicted, average="macro")
+        abs_recall_score = sklearn.metrics.recall_score(y_true, y_predicted, average="micro")
+        macro_recall_score = sklearn.metrics.recall_score(y_true, y_predicted, average="macro")
+        metrics = {"absolute F1 score": abs_f1,
+                   "weighted F1 score": macro_f1,
+                   "absolute Precision score": abs_precision,
+                   "weighted Precistion score": macro_precision,
+                   "absolute Recall score": abs_recall_score,
+                   "weighted Recall score": macro_recall_score,
+                   }
+
+
+        return valid_loss / len(valid_dataset), metrics
 
     def predict(self, x):
         """

@@ -1,9 +1,11 @@
 import torch
+import numpy as np
 from torch import argmax
 from torch import nn
 from typing import List
 from collections import OrderedDict
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from utils import pretrained_feature_extractor
 from model import Model
 
 
@@ -115,17 +117,16 @@ IMPOSSIBLE = -1e4
 class CRF(nn.Module):
     """General CRF module.
     :param in_features: number of features for the input
-    :param num_tag: number of tags. Include START, STOP tags
+    :param num_tag: number of tags.
     as the last 2 labels.
     """
 
-    def __init__(self, num_classes,device="cpu"):
+    def __init__(self, num_classes, device="cpu"):
         super(CRF, self).__init__()
 
         self.num_classes = num_classes
         self.start_idx = self.num_classes - 2
         self.stop_idx = self.num_classes - 1
-
         # transition factor, Tij mean transition from j to i
         self.transitions = nn.Parameter(torch.randn(self.num_classes, self.num_classes,device=device), requires_grad=True)
         self.transitions.data[self.start_idx, :] = IMPOSSIBLE
@@ -195,12 +196,12 @@ class CRF(nn.Module):
         bps = torch.zeros(B, L, C, dtype=torch.long, device=features.device)  # back pointers
 
         # Initialize the viterbi variables in log space
-        # max_score = torch.full((B, C), IMPOSSIBLE, device=features.device)  # [B, C]
-        # max_score[:, self.start_idx] = 0
+        max_score = torch.full((B, C), IMPOSSIBLE, device=features.device)  # [B, C]
+        max_score[:, self.start_idx] = 0
         # The previous is an hard constraint and furthermore we don't always
         # use batch with full sentences, we may have piece of sentences within
         # a sentence
-        max_score = torch.zeros((B,C), device=features.device)
+        # max_score = torch.zeros((B,C), device=features.device)
 
         for t in range(L):
             mask_t = masks[:, t].unsqueeze(1)  # [B, 1]
@@ -214,7 +215,7 @@ class CRF(nn.Module):
             max_score = acc_score_t * mask_t + max_score * (1 - mask_t)  # max_score or acc_score_t
 
         # Transition to STOP_TAG
-        # max_score += self.transitions[self.stop_idx]
+        max_score += self.transitions[self.stop_idx]
         best_score, best_tag = max_score.max(dim=-1)
 
         # Follow the back pointers to decode the best path.
@@ -242,8 +243,8 @@ class CRF(nn.Module):
         """
         B, L, C = features.shape
 
-        # scores = torch.full((B, C), IMPOSSIBLE, device=features.device)  # [B, C]
-        # scores[:, self.start_idx] = 0.
+        scores = torch.full((B, C), IMPOSSIBLE, device=features.device)  # [B, C]
+        scores[:, self.start_idx] = 0.
         scores = torch.zeros((B,C), device=features.device)
         trans = self.transitions.unsqueeze(0)  # [1, C, C]
 
@@ -255,7 +256,7 @@ class CRF(nn.Module):
 
             mask_t = masks[:, t].unsqueeze(1)  # [B, 1]
             scores = score_t * mask_t + scores * (1 - mask_t)
-        scores = log_sum_exp(scores + self.transitions[self.stop_idx])
+        scores = log_sum_exp(scores) # + self.transitions[self.stop_idx])
         return scores
    
 class BiLSTMCRFModel(nn.Module, Model):
@@ -264,17 +265,22 @@ class BiLSTMCRFModel(nn.Module, Model):
                  num_classes: int,
                  hidden_size: int,
                  batch_first: bool,
+                 embedding_dict: "gensim pretrained embedding",
+                 id_to_labels: dict,
                  device= "cpu",
+                 dropout = 0.0,
                  ):
         super(BiLSTMCRFModel, self).__init__()
         self.name = "BiLSTM_crf_model"
         self.num_classes = num_classes
-        self.bilstm = nn.LSTM(input_features, hidden_size//2,bidirectional=True,batch_first=batch_first,device=device)
-        
+        self.embedding_dict = embedding_dict
+        self.device = device
+        self.bilstm = nn.LSTM(input_features, hidden_size//2,bidirectional=True,batch_first=batch_first,device=device, dropout=dropout)
+        self.id_to_labels = id_to_labels
         self.hidden_size = (hidden_size//2)*2
         self.fc_layer = nn.Linear(self.hidden_size,num_classes,device=device)
         
-        self.crf_layer = CRF(num_classes,device)
+        self.crf_layer = CRF(num_classes, device)
     
 
     def extract_features(self, inputs):
@@ -319,22 +325,56 @@ class BiLSTMCRFModel(nn.Module, Model):
         scores, tag_seq = self.crf_layer(features, masks)
         return scores, tag_seq
     
+    def predict(self, tokens: List[List[str]]) -> List[List[str]]:
+  
+        embedded_tokens = pretrained_feature_extractor(tokens, self.embedding_dict).to(self.device)
+        with torch.no_grad():
+            scores, tag_seq = self.forward(embedded_tokens)
+        predictions = []
+        for sentence_labels in tag_seq:
+            predictions.append([])
+            for label in sentence_labels:
+                predictions[-1].append(self.id_to_labels[str(label)])
+                
+        return predictions
+        
+    def load_weights(self, path_to_weight: str):
+        """load weights from a .pt file
 
+        """
+        self.load_state_dict(torch.load(path_to_weight)) 
+
+        
+        
+        
 if __name__ == "__main__":
-    label_to_id = {"O": 0, "B-LOC": 1, "B-CW": 2, "I-CW": 3, "B-PER": 4, "I-PER": 5, "B-CORP": 6, "I-CORP": 7, "B-GRP": 8, "I-GRP": 9, "B-PROD": 10, "I-PROD": 11, "I-LOC": 12,"<PAD>": 13, "<START>": 14, "<STOP>": 15}
-    id_to_label = {"0": "O", "1": "B-LOC", "2": "B-CW", "3": "I-CW", "4": "B-PER", "5": "I-PER", "6": "B-CORP", "7": "I-CORP", "8": "B-GRP", "9": "I-GRP", "10": "B-PROD", "11": "I-PROD", "12": "I-LOC","13": "<PAD>", "14": "<START>", "15": "<STOP>"}
+    import gensim.downloader
+    # =============================================================================
+    # STOPWORDS AND EMBEDDING
+    # =============================================================================
+    # downloaded in C:/Users/Francesco/gensim-data
+    # use glove-wiki during debugging since it's faster to load
+    device = "cpu"
+    word2vec_embed = gensim.downloader.load('glove-wiki-gigaword-50')
+    # word2vec_embed = gensim.downloader.load('word2vec-google-news-300')
+    embedding_size = word2vec_embed.vector_size
+    word2vec_embed.add_vector("<pad>", np.zeros(embedding_size))
+    unk_embedding = word2vec_embed.vectors.mean(axis=0)
+    word2vec_embed.add_vector("<unk>", unk_embedding)
+    label_to_id = {"O": 0, "B-LOC": 1, "B-CW": 2, "I-CW": 3, "B-PER": 4, "I-PER": 5, "B-CORP": 6, "I-CORP": 7, "B-GRP": 8, "I-GRP": 9, "B-PROD": 10, "I-PROD": 11, "I-LOC": 12}
+    id_to_label = {"0": "O", "1": "B-LOC", "2": "B-CW", "3": "I-CW", "4": "B-PER", "5": "I-PER", "6": "B-CORP", "7": "I-CORP", "8": "B-GRP", "9": "I-GRP", "10": "B-PROD", "11": "I-PROD", "12": "I-LOC"}
     # id_to_label[str(len(id_to_label))] = "START_TAG"
     # id_to_label[str(len(id_to_label))] = "STOP_TAG"
     # label_to_id["START_TAG"] = len(label_to_id)
     # label_to_id["STOP_TAG"] = len(label_to_id)
-    bilstm_model = BiLSTMModel(300, 256, 1, 12, True, [128,64,32])
-    bilstm_crf_model = BiLSTMCRFModel(300, len(label_to_id), 256, True)
+    bilstm_model = BiLSTMModel(50, 256, 1, 12, True, [128,64,32])
+    bilstm_crf_model = BiLSTMCRFModel(50, len(label_to_id), 256, True, word2vec_embed, id_to_label, device)
     # We need batch first in order to easily create the masks.
     # BATCH_FIRST=FALSE -> [SEQ_LEN, BATCH_SIZE, FEATURES]
     # BATCH_FIRST=TRUE -> [BATCH_SIZE, SEQ_LEN, FEATURES]
-    fake_input = torch.rand([10,5,300])
+    fake_input = torch.rand([10,5,50])
     fake_label = torch.randint(len(id_to_label), (10,5))
-    pad_tensor = torch.zeros(300)
+    pad_tensor = torch.zeros(50)
     # zero out some to simulated the
     fake_input[0][5:5] = pad_tensor
     fake_input[2][2:5] = pad_tensor
@@ -344,18 +384,11 @@ if __name__ == "__main__":
     fake_input[7][4:5] = pad_tensor
     fake_input[8][4:5] = pad_tensor
     fake_input[9][1:5] = pad_tensor
-    fake_label[0][5:5] = 13
-    fake_label[2][2:5] = 13
-    fake_label[4][3:5] = 13
-    fake_label[5][4:5] = 13
-    fake_label[6][3:5] = 13
-    fake_label[7][4:5] = 13
-    fake_label[8][4:5] = 13
-    fake_label[9][1:5] = 13
     bilstm_output = bilstm_model(fake_input)
     score, label_sequence = bilstm_crf_model(fake_input)
     loss = bilstm_crf_model.loss(fake_input, fake_label)
-    
+    sentence_to_predict = [["My", "name", "is", "Robin", "Hood"], ["Hey", "how","are","you"]]
+    predictions = bilstm_crf_model.predict(sentence_to_predict)
 
 
     

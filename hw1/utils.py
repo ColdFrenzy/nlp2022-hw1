@@ -1,6 +1,7 @@
 import json
 import torch
 import matplotlib.pyplot as plt
+import random
 from typing import List, Dict, Tuple
 from collections import defaultdict
 
@@ -126,7 +127,7 @@ def plot_dict(distr: dict):
     plt.xticks(range(len(distr)), list(distr.keys()))
 
 
-def extract_sequences(sequence: List[Tuple[str,str]], seq_len, skip_len, centered= False,):
+def extract_sequences(sequence: List[Tuple[str,str]], seq_len, skip_len, labels, centered= False):
     """extract sequence of length seq_len from the original sentence.
 
     It also add padding if needed
@@ -159,55 +160,61 @@ def extract_sequences(sequence: List[Tuple[str,str]], seq_len, skip_len, centere
                     new_labels[-1].append(sequence[j][1])
     else:
         # start from -1 since we add the padding
-        for i in range(-1,len(sequence), skip_len):
+        for i in range(0,len(sequence), skip_len):
             new_sequence.append([])
             new_labels.append([])
             # PAD IF THE SEQUENCE IS SMALL
             if i + seq_len > len(sequence):
                 for j in range(seq_len):
-                    if i == -1 and j==0:
-                        # add padding to mark the beginning of the sentence
-                        new_sequence[-1].append("<pad>")
-                        new_labels[-1].append("PAD")
-                    elif i + j < len(sequence):
+                    # if i == -1 and j==0:
+                    #     # add padding to mark the beginning of the sentence
+                    #     new_sequence[-1].append("<pad>")
+                    #     new_labels[-1].append("PAD")
+                    if i + j < len(sequence):
                         new_sequence[-1].append(sequence[i+j][0])
                         new_labels[-1].append(sequence[i+j][1])
                     else:
                         new_sequence[-1].append("<pad>")
-                        new_labels[-1].append("PAD")
+                        # new_labels[-1].append("PAD")
+                        new_labels[-1].append(random.choice(labels))
                 
             else:
                 for j in range(seq_len):
-                    if i == -1 and j==0:
-                        # add padding to mark the beginning of the sentence
-                        new_sequence[-1].append("<pad>")
-                        new_labels[-1].append("PAD")
-                    else:
-                        new_sequence[-1].append(sequence[i+j][0])
-                        new_labels[-1].append(sequence[i+j][1])
+                    # if i == -1 and j==0:
+                    #     # add padding to mark the beginning of the sentence
+                    #     new_sequence[-1].append("<pad>")
+                    #     new_labels[-1].append("PAD")
+                    # else:
+                    new_sequence[-1].append(sequence[i+j][0])
+                    new_labels[-1].append(sequence[i+j][1])
                     
 
     return new_sequence, new_labels      
 
 
-def pretrained_feature_extractor(text: str, missing_words: defaultdict,
-                                 word2vec_embed):
+def pretrained_feature_extractor(text: str, word2vec_embed, missing_words: defaultdict = None, add_initial_padding = False):
     """Use a pretrained embedding the text.
     
     :param text:  list of lists where inner list has len = seq_len
-    :param missing_words: dictionary of unseen words in the embedding model
     :param world2vec_embed: embedding vector
+    :param missing_words: dictionary of unseen words in the embedding model
+    :param add_initial_padding: if true adds 1
     :return embedded sentences: final embedding of the sentence
     """
-    
-    embedding = torch.zeros((len(text), len(text[0]),word2vec_embed.vector_size))
+    list_len = [len(i) for i in text]
+    max_seq = max(list_len)
+    if add_initial_padding:
+        embedding = torch.zeros((len(text), max_seq+1, word2vec_embed.vector_size))
+    else:
+        embedding = torch.zeros((len(text), max_seq, word2vec_embed.vector_size))
     for i, sub_sentences in enumerate(text):
         for j,word in enumerate(sub_sentences):
-            if word in word2vec_embed: 
-                embedding[i][j] = torch.from_numpy(word2vec_embed[word])
+            if word in word2vec_embed:   
+                    embedding[i][j if not add_initial_padding else j+1] = torch.from_numpy(word2vec_embed[word])
             else:
-                missing_words[word] += 1
-                embedding[i][j] = torch.from_numpy(word2vec_embed["<unk>"])
+                if missing_words is not None:
+                    missing_words[word] += 1
+                embedding[i][j if not add_initial_padding else j+1] = torch.from_numpy(word2vec_embed["<unk>"])
 
     return embedding
 
@@ -225,7 +232,7 @@ def update_missing_words(text: str, missing_words: defaultdict,
         else:
             missing_words[word[0]] += 1
             
-def extract_embedding(words: str, missing_words: defaultdict, word2vec_embed):
+def extract_embedding(words: str, word2vec_embed, missing_words: defaultdict=None):
     """Use a pretrained embedding the text.
     
     :param text:  list of lists where inner list has len = seq_len
@@ -239,7 +246,8 @@ def extract_embedding(words: str, missing_words: defaultdict, word2vec_embed):
         if word in word2vec_embed: 
             embedding[i] = torch.from_numpy(word2vec_embed[word])
         else:
-            missing_words[word] += 1
+            if missing_words is not None:
+                missing_words[word] += 1
             embedding[i] = torch.from_numpy(word2vec_embed["<unk>"])
 
     return embedding 

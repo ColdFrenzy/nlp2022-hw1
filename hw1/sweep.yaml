@@ -16,8 +16,13 @@ parameters:
     - 200
   dropout:
     distribution: uniform
-    max: 0.8
+    max: 0.5
     min: 0
+  seq_skip:
+    values:
+    - 2
+    - 3
+    - 4
   epochs:
     value: 100
   hidden_size:
@@ -28,7 +33,7 @@ parameters:
     - 64
   learn_rate:
     distribution: uniform
-    max: 0.3
+    max: 0.001
     min: 0.0003
   seq_len:
     values:
@@ -37,4 +42,4 @@ parameters:
     - 10
     - 15
     - 20
-program: main.py
+program: sweep.py
