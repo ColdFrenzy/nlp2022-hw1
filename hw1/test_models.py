@@ -62,19 +62,18 @@ if __name__ == "__main__":
     num_of_classes = len(label_to_id)
     num_of_labels = len(label_to_id)
     embedding_len = word2vec_embed.vector_size
-    # light-sweep-13 paramss
-    # seq_len = 10
-    # seq_skip = 4
+    # glorious-sweep-1 params
+    # seq_len = 20
+    # seq_skip = 2
     # bilstm_hidden_size = 64
-    # batch_size = 20
-    # dropout = 0.2776
-    # 
-    seq_len = 3
+    # batch_size = 50
+    dropout = 0.3501
+    # lilac-sweep-3 params
+    seq_len = 20
     seq_skip = 2
     bilstm_hidden_size = 256
-
-    batch_size = 50
-    dropout = 0.05785
+    batch_size = 16
+    dropout = 0.233
 
     # =============================================================================
     #  MODEL
@@ -101,10 +100,10 @@ if __name__ == "__main__":
     
 
 
-    # NEW_WEIGHTS_DIR = os.path.join(WEIGHTS_DIR, "light-sweep-11")
-    # model_name = f"{bilstm_crf_model.name}_17.pt"
-    NEW_WEIGHTS_DIR = os.path.join(WEIGHTS_DIR, "sweepy-sweep-3")
-    model_name = f"{bilstm_crf_model.name}_24.pt"
+    NEW_WEIGHTS_DIR = os.path.join(WEIGHTS_DIR, "lilac-sweep-3")
+    model_name = f"{bilstm_crf_model.name}_25.pt"
+    # NEW_WEIGHTS_DIR = os.path.join(WEIGHTS_DIR, "glorious-sweep-1")
+    # model_name = f"{bilstm_crf_model.name}_29.pt"
     if not os.path.exists(NEW_WEIGHTS_DIR):
         os.mkdir(NEW_WEIGHTS_DIR)
     

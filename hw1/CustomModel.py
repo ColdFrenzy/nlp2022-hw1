@@ -5,8 +5,8 @@ from torch import nn
 from typing import List
 from collections import OrderedDict
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from utils import pretrained_feature_extractor
-from model import Model
+from hw1.utils import pretrained_feature_extractor
+from hw1.model import Model
 
 
 class FCModel(nn.Module, Model):
@@ -278,7 +278,7 @@ class BiLSTMCRFModel(nn.Module, Model):
         self.bilstm = nn.LSTM(input_features, hidden_size//2,bidirectional=True,batch_first=batch_first,device=device, dropout=dropout)
         self.id_to_labels = id_to_labels
         self.hidden_size = (hidden_size//2)*2
-        self.fc_layer = nn.Linear(self.hidden_size,num_classes,device=device)
+        self.fc_layer = nn.Linear(self.hidden_size,num_classes+2,device=device)
         
         self.crf_layer = CRF(num_classes, device)
     
@@ -342,8 +342,11 @@ class BiLSTMCRFModel(nn.Module, Model):
         """load weights from a .pt file
 
         """
-        self.load_state_dict(torch.load(path_to_weight)) 
-
+        
+        if self.device == "cpu":
+            self.load_state_dict(torch.load(path_to_weight, map_location=torch.device('cpu'))) 
+        else:
+            self.load_state_dict(torch.load(path_to_weight))
         
         
         
