@@ -6,6 +6,7 @@ import sklearn
 import json
 import numpy as np
 import wandb
+import random
 import torch
 import random
 import gensim.downloader
@@ -18,7 +19,6 @@ from utils import load_labels, pretrained_feature_extractor, extract_embedding
 from Dataset import NamedEntityRecognitionDataset
 from torch.utils.data import DataLoader
 from CustomModel import BiLSTMCRFModel
-
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('Using device:', device)
@@ -114,10 +114,10 @@ if __name__ == "__main__":
     # =============================================================================
     pretrained_feature_extractor = extract_embedding
     training_data = NamedEntityRecognitionDataset(TRAIN_FILE, pretrained_feature_extractor,
-                                    label_to_id,seq_len,seq_skip, stopset, word2vec_embed)
+                                    label_to_id,seq_len,seq_skip, word2vec_embed)
     train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
     dev_data = NamedEntityRecognitionDataset(DEV_FILE, pretrained_feature_extractor,
-                               label_to_id,seq_len,seq_skip, stopset, word2vec_embed)
+                               label_to_id,seq_len,seq_skip, word2vec_embed)
     # =============================================================================
     # TRAINER
     # =============================================================================
@@ -147,7 +147,7 @@ if __name__ == "__main__":
         avg_epoch_loss, valid_loss, metrics = trainer.train(train_dataloader,
                                                     dev_data, 1)
         to_log = {"train_loss": avg_epoch_loss,
-                  "dev_loss": valid_loss}
+                  "valid_loss": valid_loss}
         to_log.update(metrics)
         wandb.log(to_log)
         NEW_WEIGHTS_DIR = os.path.join(WEIGHTS_DIR, run_name)

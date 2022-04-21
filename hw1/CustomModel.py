@@ -124,7 +124,7 @@ class CRF(nn.Module):
     def __init__(self, num_classes, device="cpu"):
         super(CRF, self).__init__()
 
-        self.num_classes = num_classes
+        self.num_classes = num_classes + 2
         self.start_idx = self.num_classes - 2
         self.stop_idx = self.num_classes - 1
         # transition factor, Tij mean transition from j to i
