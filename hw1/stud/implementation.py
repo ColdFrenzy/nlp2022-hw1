@@ -3,9 +3,9 @@ import os
 import torch
 from torch import nn
 from typing import List, Tuple
-from hw1.CustomModel import  BiLSTMCRFModel, CRF
-from hw1.model import Model
-from hw1.utils import load_labels
+from .CustomModel import  BiLSTMCRFModel, CRF
+from model import Model
+from .utils import load_labels
 import gensim.downloader
 
 MAIN_DIR = os.path.abspath(os.path.join(__file__, os.pardir, os.pardir,os.pardir))
